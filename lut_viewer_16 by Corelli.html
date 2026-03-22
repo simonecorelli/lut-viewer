@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>LUT Cube Viewer</title>
+<style>
+:root {
+  --bg:#0e0e0f; --surface:#18181a; --surface2:#222224;
+  --border:#2e2e32; --text:#e8e6e0; --muted:#888780;
+  --accent:#c8a96e; --radius:6px; --font:'DM Mono','Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:12px;
+  min-height:100vh;display:flex;flex-direction:column;user-select:none}
+header{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;
+  align-items:center;gap:14px;flex-wrap:wrap}
+h1{font-size:12px;font-weight:400;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--accent);flex-shrink:0}
+.upload-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  padding:5px 12px;border-radius:var(--radius);cursor:pointer;font-family:var(--font);
+  font-size:11px;letter-spacing:.06em;flex-shrink:0}
+.upload-btn:hover{border-color:var(--accent)}
+#file-input{display:none}
+#lut-info{color:var(--muted);font-size:11px;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.controls{padding:8px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.cg{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.cg label{color:var(--muted);font-size:11px;width:50px;text-align:right;flex-shrink:0}
+input[type=range]{-webkit-appearance:none;appearance:none;width:270px;height:3px;
+  background:var(--border);border-radius:2px;outline:none;flex-shrink:0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;
+  border-radius:50%;background:var(--accent);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;
+  background:var(--accent);cursor:pointer;border:none}
+.vl{color:var(--accent);font-size:11px;width:46px;text-align:right;flex-shrink:0}
+.reset-btn{background:none;border:1px solid var(--border);color:var(--muted);
+  padding:3px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--font);font-size:10px}
+.reset-btn:hover{border-color:var(--accent);color:var(--accent)}
+.main{flex:1;display:flex;flex-direction:column;padding:12px 16px;gap:10px}
+.cubes-row{display:flex;flex-direction:column;gap:10px;flex:1}
+.cube-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.cube-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);text-align:center}
+canvas{display:block;width:100%;border-radius:var(--radius);
+  border:1px solid var(--border);touch-action:none;cursor:grab}
+canvas.drag{cursor:grabbing}
+.info{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:10px 14px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;min-height:90px}
+.cbw{display:flex;gap:9px;align-items:center}
+.cb{width:52px;height:52px;border-radius:var(--radius);border:1px solid var(--border);flex-shrink:0}
+.cv{display:flex;flex-direction:column;gap:2px}
+.cv .lb{font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1px}
+.cv .vv{font-size:11px;color:var(--text)}
+.arr{font-size:20px;color:var(--border)}
+.nos{color:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <h1>LUT viewer by Simone Corelli, 22 Mar 2026</h1>
+  <button class="upload-btn" onclick="document.getElementById('file-input').click()">↑ Load .CUBE</button>
+  <input type="file" id="file-input" accept=".CUBE,.cube">
+  <span id="lut-info">Demo: LUT 3³ CESMA</span>
+  <button class="upload-btn" onclick="document.getElementById('img-input').click()">↑ Load image</button>
+  <input type="file" id="img-input" accept="image/*" style="display:none">
+  <button class="reset-btn" id="btn-rmimg" style="display:none">✕ image</button>
+  <button class="reset-btn" id="btn-diff" style="color:var(--accent)">DIFF</button>
+  <select id="sel-input" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 7px;border-radius:var(--radius);font-family:var(--font);font-size:11px;cursor:pointer">
+    <option value="srgb">Input: sRGB</option>
+    <option value="argb">Input: AdobeRGB</option>
+    <option value="p3">Input: Display P3</option>
+    <option value="rec2020">Input: Rec.2020</option>
+  </select>
+  <select id="sel-view" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 7px;border-radius:var(--radius);font-family:var(--font);font-size:11px;cursor:pointer">
+    <option value="rgb">View: RGB</option>
+    <option value="lab65">View: CIE Lab D65</option>
+    <option value="lab50">View: CIE Lab D50</option>
+  </select>
+</header>
+<div class="controls">
+  <div class="cg"><label>ROT X</label><input type="range" id="sl-rx" min="-180" max="180" value="0" step="1"><span class="vl" id="vl-rx">0°</span></div>
+  <div class="cg"><label>ROT Y</label><input type="range" id="sl-ry" min="-180" max="180" value="0" step="1"><span class="vl" id="vl-ry">0°</span></div>
+  <div class="cg"><label>ROT Z</label><input type="range" id="sl-rz" min="-180" max="180" value="0" step="1"><span class="vl" id="vl-rz">0°</span></div>  <div class="cg"><label>Distanza</label><input type="range" id="sl-dist" min="-400" max="1000" value="60" step="1"><span class="vl" id="vl-dist">60 cm</span></div>
+  <div class="cg"><label>Lato</label><input type="range" id="sl-cube" min="5" max="500" value="15" step="1"><span class="vl" id="vl-cube">15 cm</span></div>
+  <div class="cg"><label>Offset X</label><input type="range" id="sl-ox" min="-600" max="600" value="0" step="1"><span class="vl" id="vl-ox">0 cm</span></div>
+  <div class="cg"><label>Offset Y</label><input type="range" id="sl-oy" min="-600" max="600" value="0" step="1"><span class="vl" id="vl-oy">0 cm</span></div>
+  <button class="reset-btn" id="btn-center">Centra</button>
+  <button class="reset-btn" id="btn-reset">Reset</button>
+</div>
+<div class="main">
+  <div class="cubes-row">
+    <div class="cube-wrap"><div class="cube-label" id="lbl-input">Input RGB</div><canvas id="c1"></canvas></div>
+    <div class="cube-wrap"><div class="cube-label">Output LUT</div><canvas id="c2"></canvas></div>
+  </div>
+  <div class="info" id="info-panel">
+    <span class="nos">Click a sphere to inspect RGB values.</span>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ── Parametri fisici ──
+// Monitor 27": larghezza fisica ≈ 598mm ≈ 60cm
+// Osservatore fisso a 50cm dallo schermo
+// Il cubo deve apparire largo 20cm sul monitor
+// La scacchiera è a 100cm dall'osservatore (50cm dietro lo schermo)
+// distCm = distanza cubo dall'osservatore (slider 10..100cm)
+// Il piano dello schermo = 50cm dall'osservatore
+// Sfere con distanza_da_osservatore < 50cm → davanti allo schermo → NASCOSTE
+// Sfere con distanza_da_osservatore >= 50cm → dietro o nel piano → VISIBILI
+
+var MONITOR_W_CM = 60;   // larghezza fisica monitor 27"
+var EYE_CM = 50;         // osservatore a 50cm fissi
+var CUBE_SIZE_CM = 20;   // cubo deve apparire largo 20cm
+var CHECKER_DIST_CM = 100; // scacchiera a 100cm dall'osservatore
+var CHECKER_SQ_CM = 10;  // quadrati da 10cm
+
+
+// ── Matrici RGB→XYZ e funzioni Lab ──
+var MAT={
+  srgb:  [[0.412391,0.357584,0.180481],[0.212639,0.715169,0.072192],[0.019331,0.119195,0.950532]],
+  argb:  [[0.576669,0.185558,0.188229],[0.297345,0.627364,0.075291],[0.027031,0.070689,0.991338]],
+  p3:    [[0.486571,0.265668,0.198217],[0.228975,0.691739,0.079287],[0.000000,0.045113,1.043944]],
+  rec2020:[[0.636958,0.144617,0.168881],[0.262700,0.677998,0.059302],[0.000000,0.028073,1.060985]]
+};
+// Adattamento cromatico D65→D50 (Bradford)
+var M_D65_D50=[[1.047930,0.022947,-0.050192],[0.029628,0.990434,-0.017074],[-0.009243,0.015055,0.751874]];
+// White points XYZ
+var WP={
+  d65:{X:0.95046,Y:1.00000,Z:1.08906},
+  d50:{X:0.96429,Y:1.00000,Z:0.82510}
+};
+
+function mx3(m,v){
+  return[m[0][0]*v[0]+m[0][1]*v[1]+m[0][2]*v[2],
+         m[1][0]*v[0]+m[1][1]*v[1]+m[1][2]*v[2],
+         m[2][0]*v[0]+m[2][1]*v[1]+m[2][2]*v[2]];
+}
+
+// sRGB/AdobeRGB linearizzazione (gamma 2.2 approssimazione per AdobeRGB; sRGB usa la propria)
+function linearize(v, space){
+  if(space==='srgb'){
+    return v<=0.04045 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4);
+  } else if(space==='argb'){
+    return Math.pow(v,2.2);
+  } else if(space==='p3'){
+    // Display P3 usa la stessa EOTF di sRGB
+    return v<=0.04045 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4);
+  } else { // rec2020
+    var b=0.018053968510807; var a=1-b*4; // approssimazione
+    return v<b*4.5 ? v/4.5 : Math.pow((v+a-1)/a, 1/0.45);
+  }
+}
+
+function labF(t){
+  var d=6/29; return t>d*d*d ? Math.pow(t,1/3) : t/(3*d*d)+4/29;
+}
+
+// Converte [r,g,b] (0..1, encoded) nello spazio inputSpace in XYZ (illuminante ill)
+function rgbToXYZ(r,g,b,inputSpace,ill){
+  var rl=linearize(r,inputSpace), gl=linearize(g,inputSpace), bl=linearize(b,inputSpace);
+  var xyz=mx3(MAT[inputSpace],[rl,gl,bl]);
+  if(ill==='d50') xyz=mx3(M_D65_D50,xyz);
+  return xyz;
+}
+
+// XYZ → Lab dato il white point wp={X,Y,Z}
+function xyzToLab(xyz,wp){
+  var fx=labF(xyz[0]/wp.X), fy=labF(xyz[1]/wp.Y), fz=labF(xyz[2]/wp.Z);
+  return[116*fy-16, 500*(fx-fy), 200*(fy-fz)];
+}
+
+// Lab → coordinate normalizzate [-1,+1] per il cubo 3D
+// L* ∈ [0,100] → [-1,+1],  a*,b* ∈ [-128,+127] → [-1,+1]
+function labToUnit(lab){
+  return[lab[0]/50-1, lab[1]/128, lab[2]/128];
+}
+
+// Converte Lab → XYZ → sRGB lineare → sRGB encoded (per visualizzare il colore)
+var M_sRGB_inv=[ // XYZ D65 → sRGB lineare
+  [ 3.240970,-1.537383,-0.498611],
+  [-0.969244, 1.875968, 0.041555],
+  [ 0.055630,-0.203977, 1.056972]
+];
+var M_D50_D65=[ // D50→D65 (inversa Bradford)
+  [ 0.955473, -0.023099,  0.063309],
+  [-0.028370,  1.009995,  0.021041],
+  [ 0.012294, -0.020535,  1.330084]
+];
+function srgbEncode(v){ return v<=0.0031308?12.92*v:1.055*Math.pow(v,1/2.4)-0.055; }
+
+function labToSRGB(lab, ill){
+  var wp=ill==='d50'?WP.d50:WP.d65;
+  var fy=(lab[0]+16)/116, fx=lab[1]/500+fy, fz=fy-lab[2]/200;
+  var d=6/29;
+  function fi(t){return t>d?t*t*t:3*d*d*(t-4/29);}
+  var xyz=[fi(fx)*wp.X, fi(fy)*wp.Y, fi(fz)*wp.Z];
+  if(ill==='d50') xyz=mx3(M_D50_D65,xyz);
+  var lin=mx3(M_sRGB_inv,xyz);
+  return[
+    Math.max(0,Math.min(1,srgbEncode(lin[0]))),
+    Math.max(0,Math.min(1,srgbEncode(lin[1]))),
+    Math.max(0,Math.min(1,srgbEncode(lin[2])))
+  ];
+}
+
+var inputSpace='srgb', viewSpace='rgb';
+var S=3, lutData=[], selectedIdx=null, builtPts=[];
+var rotX=0, rotY=0, rotZ=0, distCm=60, cubeSizeCm=15, offXcm=0, offYcm=0, diffMode=false;
+var bgImage=null, bgImageLUT=null, bgImageDIFF=null; // originale, trasformata, differenza
+var dragActive=false, dragMoved=false, dragLX=0, dragLY=0;
+var rafPending=false;
+
+// Demo LUT CESMA
+var demo=[
+  {r:0,g:0,b:0},{r:.25,g:.25,b:.25},{r:.5,g:.5,b:.5},
+  {r:.15,g:.15,b:.15},{r:.325,g:.325,b:.325},{r:.475,g:.475,b:.475},
+  {r:.3,g:.3,b:.3},{r:.5,g:.5,b:.5},{r:.7,g:.7,b:.7},
+  {r:.5,g:0,b:0},{r:.525,g:.275,b:.275},{r:.55,g:.425,b:.425},
+  {r:.333,g:.333,b:.333},{r:.416,g:.416,b:.416},{r:.5,g:.5,b:.5},
+  {r:.4,g:.4,b:.4},{r:.5,g:.5,b:.5},{r:.6,g:.6,b:.6},
+  {r:1,g:0,b:0},{r:1,g:.25,b:.25},{r:1,g:.4,b:.4},
+  {r:1,g:.5,b:.5},{r:.666,g:.666,b:.666},{r:.6,g:.6,b:.6},
+  {r:1,g:.5,b:.5},{r:.75,g:.75,b:.75},{r:.7,g:.7,b:.7}
+];
+lutData=demo.slice(); S=3;
+
+// ── Parsing .cube ──
+function parseCube(txt){
+  var lines=txt.split('\n'), size=0, data=[];
+  for(var i=0;i<lines.length;i++){
+    var l=lines[i].trim();
+    if(!l||l[0]==='#') continue;
+    if(/^LUT_3D_SIZE/i.test(l)){size=parseInt(l.split(/\s+/)[1],10);continue;}
+    if(/^(TITLE|DOMAIN|LUT_1D|MESH)/i.test(l)) continue;
+    var p=l.split(/[\s,]+/).filter(Boolean);
+    if(p.length>=3){
+      var r=parseFloat(p[0]),g=parseFloat(p[1]),b=parseFloat(p[2]);
+      if(!isNaN(r)&&!isNaN(g)&&!isNaN(b)) data.push({r:r,g:g,b:b});
+    }
+  }
+  return {size:size,data:data};
+}
+
+document.getElementById('file-input').addEventListener('change',function(e){
+  var f=e.target.files[0]; if(!f) return;
+  var rd=new FileReader();
+  rd.onload=function(ev){
+    var res=parseCube(ev.target.result);
+    var sz=res.size, dat=res.data, exp=sz*sz*sz;
+    if(sz<2||dat.length<exp){
+      alert('LUT non valida. Size:'+sz+' punti:'+dat.length+' attesi:'+exp); return;
+    }
+    S=sz; lutData=dat.slice(0,exp); selectedIdx=null;
+    rebuildLUTImage();
+    document.getElementById('lut-info').textContent=
+      f.name+'  —  '+sz+'\u00b3 = '+exp+' punti';
+    schedRender(); updateInfo();
+  };
+  rd.readAsText(f); e.target.value='';
+});
+
+// ── Proiezione prospettica fisicamente corretta ──
+// Tutto in cm. Osservatore in (0,0,0), schermo a z=EYE_CM.
+// Canvas ha larghezza W px che corrisponde a MONITOR_W_CM cm fisici.
+// pxPerCm = W / MONITOR_W_CM
+// Un punto 3D in cm (X,Y,Z_from_eye) proietta su schermo a:
+//   x_screen_cm = X * EYE_CM / Z_from_eye
+//   x_screen_px = x_screen_cm * pxPerCm
+//
+// Il cubo ha coordinate interne [-1,+1], deve apparire largo CUBE_SIZE_CM.
+// Il cubo è centrato a distanza distCm dall'osservatore.
+// scala_cubo = CUBE_SIZE_CM/2 cm per unità
+
+function project(rx_u, ry_u, rz_u, cx_px, cy_px, W){
+  // rx_u,ry_u,rz_u sono coordinate cubo in unità [-1,+1] già ruotate
+  // Converto in cm fisici:
+  var halfCube = cubeSizeCm / 2;
+  var X_cm = rx_u * halfCube + offXcm;
+  var Y_cm = ry_u * halfCube + offYcm;
+  // Z: rz_u=0 = centro cubo a distCm dall'osservatore
+  // rz_u negativo = più lontano dall'osservatore (dietro), positivo = più vicino
+  // Ma nelle coordinate camera standard: z aumenta lontano dall'osservatore
+  // Qui dopo rotazione rz_u>0 significa "verso l'osservatore"
+  // Distanza dall'osservatore del punto:
+  var Z_eye = distCm - rz_u * halfCube; // cm dall'osservatore
+
+  // Near clip: il punto deve essere DIETRO il piano dello schermo
+  // Piano schermo = EYE_CM cm dall'osservatore
+  // Quindi Z_eye >= EYE_CM per essere visibile
+  // (Z_eye < EYE_CM → davanti allo schermo → NASCOSTO)
+  var visible = (Z_eye >= EYE_CM);
+
+  var pxPerCm = W / MONITOR_W_CM;
+  var scale = EYE_CM / Z_eye;
+  var sx = cx_px + X_cm * scale * pxPerCm;
+  var sy = cy_px + Y_cm * scale * pxPerCm;
+
+  return {sx:sx, sy:sy, scale:scale, Z_eye:Z_eye, visible:visible};
+}
+
+// Proiezione scacchiera (a CHECKER_DIST_CM dall'osservatore)
+function projectChecker(X_cm, Y_cm, cx_px, cy_px, W){
+  var pxPerCm = W / MONITOR_W_CM;
+  var scale = EYE_CM / CHECKER_DIST_CM;
+  return {
+    sx: cx_px + X_cm * scale * pxPerCm,
+    sy: cy_px + Y_cm * scale * pxPerCm
+  };
+}
+
+function d2r(d){return d*Math.PI/180;}
+function rotPt(x,y,z){
+  var cx=Math.cos(d2r(rotX)),sx=Math.sin(d2r(rotX));
+  var cy=Math.cos(d2r(rotY)),sy=Math.sin(d2r(rotY));
+  var cz=Math.cos(d2r(rotZ)),sz=Math.sin(d2r(rotZ));
+  var y1=y*cx-z*sx, z1=y*sx+z*cx;
+  var x2=x*cy+z1*sy, z2=-x*sy+z1*cy;
+  var x3=x2*cz-y1*sz, y3=x2*sz+y1*cz;
+  return [x3,y3,z2];
+}
+
+function lutIdx(ri,gi,bi){return bi*S*S+gi*S+ri;}
+function inpCol(ri,gi,bi){var n=Math.max(1,S-1);return{r:ri/n,g:gi/n,b:bi/n};}
+function toCSS(r,g,b){return'rgb('+Math.round(r*255)+','+Math.round(g*255)+','+Math.round(b*255)+')';}
+function fmt(v){return v.toFixed(4);}
+
+// ── Build punti ──
+
+// ── Trilinear interpolation LUT su ImageData ──
+function applyLUTtoImageData(srcData, S, lutData){
+  var n=S-1;
+  var dst=new Uint8ClampedArray(srcData.data.length);
+  var d=srcData.data;
+  for(var i=0;i<d.length;i+=4){
+    var r=d[i]/255, g=d[i+1]/255, b=d[i+2]/255;
+    // Trova il cubo nell'LUT
+    var rf=r*n, gf=g*n, bf=b*n;
+    var r0=Math.floor(rf)|0, g0=Math.floor(gf)|0, b0=Math.floor(bf)|0;
+    var r1=Math.min(r0+1,n), g1=Math.min(g0+1,n), b1=Math.min(b0+1,n);
+    var dr=rf-r0, dg=gf-g0, db=bf-b0;
+    // 8 vertici del cubo nell'LUT (ordine R-fast: idx=b*S*S+g*S+r)
+    function lv(ri,gi,bi){
+      var o=lutData[bi*S*S+gi*S+ri];
+      return o||{r:ri/n,g:gi/n,b:bi/n};
+    }
+    var c000=lv(r0,g0,b0),c100=lv(r1,g0,b0),c010=lv(r0,g1,b0),c110=lv(r1,g1,b0);
+    var c001=lv(r0,g0,b1),c101=lv(r1,g0,b1),c011=lv(r0,g1,b1),c111=lv(r1,g1,b1);
+    // Trilinear
+    function tri(ch){
+      var v=function(c){return c[ch];};
+      return v(c000)*(1-dr)*(1-dg)*(1-db)+v(c100)*dr*(1-dg)*(1-db)+
+             v(c010)*(1-dr)*dg*(1-db)+    v(c110)*dr*dg*(1-db)+
+             v(c001)*(1-dr)*(1-dg)*db+    v(c101)*dr*(1-dg)*db+
+             v(c011)*(1-dr)*dg*db+         v(c111)*dr*dg*db;
+    }
+    dst[i]  =Math.round(tri('r')*255);
+    dst[i+1]=Math.round(tri('g')*255);
+    dst[i+2]=Math.round(tri('b')*255);
+    dst[i+3]=d[i+3];
+  }
+  return new ImageData(dst, srcData.width, srcData.height);
+}
+
+function diffImageData(orig, transformed){
+  var dst=new Uint8ClampedArray(orig.data.length);
+  var a=orig.data, b=transformed.data;
+  for(var i=0;i<a.length;i+=4){
+    dst[i]  =Math.abs(a[i]  -b[i]);
+    dst[i+1]=Math.abs(a[i+1]-b[i+1]);
+    dst[i+2]=Math.abs(a[i+2]-b[i+2]);
+    dst[i+3]=255;
+  }
+  return new ImageData(dst, orig.width, orig.height);
+}
+
+function rebuildLUTImage(){
+  if(!bgImage||!lutData.length) return;
+  bgImageLUT=applyLUTtoImageData(bgImage,S,lutData);
+  bgImageDIFF=diffImageData(bgImage,bgImageLUT);
+}
+
+function colorToUnit(r,g,b){
+  if(viewSpace==='rgb') return[r*2-1, g*2-1, b*2-1];
+  var ill=viewSpace==='lab50'?'d50':'d65';
+  var wp=ill==='d50'?WP.d50:WP.d65;
+  var xyz=rgbToXYZ(r,g,b,inputSpace,ill);
+  var lab=xyzToLab(xyz,wp);
+  return labToUnit(lab);
+}
+
+function buildPoints(){
+  var n=Math.max(1,S-1), step=2/n, pts=[];
+  for(var ri=0;ri<S;ri++){
+    for(var gi=0;gi<S;gi++){
+      for(var bi=0;bi<S;bi++){
+        var inp=inpCol(ri,gi,bi);
+        var idx=lutIdx(ri,gi,bi);
+        var out=lutData[idx]||inp;
+        var pos=colorToUnit(inp.r,inp.g,inp.b);
+        var rot=rotPt(pos[0],pos[1],pos[2]);
+        pts.push({rx:rot[0],ry:rot[1],rz:rot[2],inp:inp,out:out,idx:idx});
+      }
+    }
+  }
+  // Ordina back-to-front (Z_eye decrescente = più lontani prima)
+  // Z_eye = distCm - rz*halfCube → più rz è grande, più Z_eye è piccolo → più vicino
+  // Quindi ordiniamo per rz crescente (lontani prima)
+  pts.sort(function(a,b){return a.rz-b.rz;});
+  return pts;
+}
+
+// ── Scacchiera ──
+function drawBgImage(ctx, imgData, W, H){
+  var tmp=document.createElement('canvas');
+  tmp.width=imgData.width; tmp.height=imgData.height;
+  tmp.getContext('2d').putImageData(imgData,0,0);
+  var iw=imgData.width, ih=imgData.height;
+  var sc=Math.max(W/iw, H/ih);
+  var dw=iw*sc, dh=ih*sc;
+  ctx.drawImage(tmp,(W-dw)/2,(H-dh)/2,dw,dh);
+}
+
+function drawChecker(ctx, cx, cy, W, H){
+  // Scacchiera a CHECKER_DIST_CM dall'osservatore
+  // Quadrati da CHECKER_SQ_CM. La scacchiera è grande abbastanza da coprire tutto il canvas.
+  // Calcoliamo quanti quadrati servono per coprire il canvas
+  var pxPerCm = W / MONITOR_W_CM;
+  var scale = EYE_CM / CHECKER_DIST_CM; // 50/100 = 0.5
+  var sqPx = CHECKER_SQ_CM * scale * pxPerCm; // dimensione quadrato in pixel
+
+  // Copriamo da -N a +N quadrati
+  var halfW = W/2, halfH = H/2;
+  var nW = Math.ceil(halfW / sqPx) + 2;
+  var nH = Math.ceil(halfH / sqPx) + 2;
+
+  var c1 = '#d0d0ce', c2 = '#b8b8b5';
+  for(var iy=-nH; iy<=nH; iy++){
+    for(var ix=-nW; ix<=nW; ix++){
+      var x0 = cx + ix*sqPx, y0 = cy + iy*sqPx;
+      ctx.fillStyle = ((ix+iy)%2===0) ? c1 : c2;
+      ctx.fillRect(x0, y0, sqPx+0.5, sqPx+0.5);
+    }
+  }
+}
+
+// ── Render ──
+function schedRender(){
+  if(rafPending) return; rafPending=true;
+  requestAnimationFrame(function(){rafPending=false; _render();});
+}
+function render(){schedRender();}
+
+function _render(){
+  builtPts=buildPoints();
+  drawCanvas(document.getElementById('c1'),false,builtPts);
+  drawCanvas(document.getElementById('c2'),true, builtPts);
+}
+
+function drawCanvas(el, useOut, pts){
+  var dpr=window.devicePixelRatio||1;
+  var W=el.clientWidth, H=el.clientHeight;
+  if(W<10||H<10) return;
+  var pw=Math.round(W*dpr), ph=Math.round(H*dpr);
+  if(el.width!==pw||el.height!==ph){el.width=pw;el.height=ph;}
+  var ctx=el.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  var cx=W/2, cy=H/2;
+
+  // Sfondo: immagine o scacchiera
+  if(useOut && diffMode && bgImageDIFF){
+    drawBgImage(ctx,bgImageDIFF,W,H);
+  } else if(useOut && bgImageLUT){
+    drawBgImage(ctx,bgImageLUT,W,H);
+  } else if(!useOut && bgImage){
+    drawBgImage(ctx,bgImage,W,H);
+  } else {
+    drawChecker(ctx, cx, cy, W, H);
+  }
+
+  // Raggio base sfere: diametro = lato_px / S * 0.666 → raggio = lato_px / S * 0.333
+  // lato_px = CUBE_SIZE_CM proiettato al centro del cubo (distCm)
+  var pxPerCm = W / MONITOR_W_CM;
+  var scaleCube = EYE_CM / distCm;
+  var ladoPx = cubeSizeCm * scaleCube * pxPerCm;
+  var baseR = (ladoPx / S) * 0.333;
+
+  var nVisible=0;
+  for(var i=0;i<pts.length;i++){
+    var p=pts[i];
+    var pr=project(p.rx,p.ry,p.rz,cx,cy,W);
+    if(!pr.visible) continue;
+    nVisible++;
+    var r=baseR*pr.scale/scaleCube; // correggo per distanza effettiva
+    if(r<1) continue;
+    var col;
+    if(useOut && diffMode){
+      col={
+        r:Math.abs(p.out.r-p.inp.r),
+        g:Math.abs(p.out.g-p.inp.g),
+        b:Math.abs(p.out.b-p.inp.b)
+      };
+    } else {
+      col=useOut?p.out:p.inp;
+    }
+    var isSel=p.idx===selectedIdx;
+
+    if(isSel){
+      ctx.beginPath(); ctx.arc(pr.sx,pr.sy,r+4,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,0.22)'; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(pr.sx,pr.sy,r,0,Math.PI*2);
+    ctx.fillStyle=toCSS(col.r,col.g,col.b); ctx.fill();
+    if(isSel){
+      ctx.beginPath(); ctx.arc(pr.sx,pr.sy,r,0,Math.PI*2);
+      ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2; ctx.stroke();
+    }
+  }
+}
+
+// ── Resize ──
+function resize(){
+  var c1=document.getElementById('c1'),c2=document.getElementById('c2');
+  var w=c1.parentElement.clientWidth;
+  var h=Math.min(Math.max(w*0.82,180),520);
+  c1.style.height=h+'px'; c2.style.height=h+'px'; render();
+}
+window.addEventListener('resize',resize);
+
+// ── Slider ──
+function bindSl(slId,vlId,suffix,setter){
+  var sl=document.getElementById(slId),vl=document.getElementById(vlId);
+  sl.addEventListener('input',function(){
+    var v=parseFloat(sl.value); setter(v);
+    vl.textContent=Math.round(v)+suffix; render();
+  });
+}
+bindSl('sl-rx','vl-rx','°',function(v){rotX=v;});
+bindSl('sl-ry','vl-ry','°',function(v){rotY=v;});
+bindSl('sl-rz','vl-rz','°',function(v){rotZ=v;});
+bindSl('sl-dist','vl-dist',' cm',function(v){distCm=v;});
+bindSl('sl-cube','vl-cube',' cm',function(v){cubeSizeCm=v;});
+bindSl('sl-ox','vl-ox',' cm',function(v){offXcm=v;});
+bindSl('sl-oy','vl-oy',' cm',function(v){offYcm=v;});
+
+document.getElementById('btn-center').addEventListener('click',function(){
+  offXcm=0; offYcm=0;
+  document.getElementById('sl-ox').value=0; document.getElementById('vl-ox').textContent='0 cm';
+  document.getElementById('sl-oy').value=0; document.getElementById('vl-oy').textContent='0 cm';
+  render();
+});
+// Load image handler
+document.getElementById('img-input').addEventListener('change',function(e){
+  var f=e.target.files[0]; if(!f) return;
+  var url=URL.createObjectURL(f);
+  var img=new Image();
+  img.onload=function(){
+    // Ridimensiona a max 1200px per performance
+    var mw=1200, mh=1200;
+    var sw=img.width, sh=img.height;
+    if(sw>mw||sh>mh){var sc=Math.min(mw/sw,mh/sh); sw=Math.round(sw*sc); sh=Math.round(sh*sc);}
+    var oc=document.createElement('canvas');
+    oc.width=sw; oc.height=sh;
+    var ox=oc.getContext('2d');
+    ox.drawImage(img,0,0,sw,sh);
+    bgImage=ox.getImageData(0,0,sw,sh);
+    rebuildLUTImage();
+    document.getElementById('btn-rmimg').style.display='';
+    URL.revokeObjectURL(url);
+    render();
+  };
+  img.src=url;
+  e.target.value='';
+});
+document.getElementById('btn-rmimg').addEventListener('click',function(){
+  bgImage=null; bgImageLUT=null; bgImageDIFF=null;
+  this.style.display='none';
+  render();
+});
+
+document.getElementById('sel-input').addEventListener('change',function(){
+  inputSpace=this.value;
+  render();
+});
+document.getElementById('sel-view').addEventListener('change',function(){
+  viewSpace=this.value;
+  var lbl=viewSpace==='rgb'?'Input RGB':
+          viewSpace==='lab65'?'Input → Lab D65':'Input → Lab D50';
+  document.getElementById('lbl-input').textContent=lbl;
+  render();
+});
+document.getElementById('btn-diff').addEventListener('click',function(){
+  diffMode=!diffMode;
+  this.style.color=diffMode?'#e05050':'var(--accent)';
+  this.textContent=diffMode?'DIFF ●':'DIFF';
+  render();
+});
+document.getElementById('btn-reset').addEventListener('click',function(){
+  rotX=0;rotY=0;rotZ=0;distCm=60;cubeSizeCm=15;offXcm=0;offYcm=0;
+  diffMode=false;
+  document.getElementById('btn-diff').style.color='var(--accent)';
+  document.getElementById('btn-diff').textContent='DIFF';
+  var def=[['sl-rx','vl-rx',0,'°'],['sl-ry','vl-ry',0,'°'],
+           ['sl-rz','vl-rz',0,'°'],           ['sl-dist','vl-dist',60,' cm'],
+           ['sl-cube','vl-cube',15,' cm'],
+           ['sl-ox','vl-ox',0,' cm'],
+           ['sl-oy','vl-oy',0,' cm']];
+  def.forEach(function(d){
+    document.getElementById(d[0]).value=d[2];
+    document.getElementById(d[1]).textContent=d[2]+d[3];
+  });
+  diffMode=false;
+  document.getElementById('btn-diff').style.color='var(--accent)';
+  document.getElementById('btn-diff').textContent='DIFF';
+  render();
+});
+
+// ── Drag ──
+function dStart(mx,my){dragActive=true;dragMoved=false;dragLX=mx;dragLY=my;}
+function dMove(mx,my){
+  if(!dragActive) return;
+  var dx=mx-dragLX,dy=my-dragLY;
+  if(Math.abs(dx)+Math.abs(dy)>2) dragMoved=true;
+  rotY+=dx*0.45; rotX-=dy*0.45;
+  rotX=Math.max(-180,Math.min(180,rotX));
+  rotY=((rotY%360)+360)%360; if(rotY>180) rotY-=360;
+  document.getElementById('sl-rx').value=Math.round(rotX);
+  document.getElementById('sl-ry').value=Math.round(rotY);
+  document.getElementById('vl-rx').textContent=Math.round(rotX)+'°';
+  document.getElementById('vl-ry').textContent=Math.round(rotY)+'°';
+  dragLX=mx; dragLY=my; render();
+}
+function dEnd(){dragActive=false;}
+['c1','c2'].forEach(function(id){
+  var el=document.getElementById(id);
+  el.addEventListener('mousedown',function(e){e.preventDefault();dStart(e.clientX,e.clientY);});
+  el.addEventListener('touchstart',function(e){dStart(e.touches[0].clientX,e.touches[0].clientY);},{passive:true});
+});
+window.addEventListener('mousemove',function(e){if(dragActive)dMove(e.clientX,e.clientY);});
+window.addEventListener('touchmove',function(e){
+  if(dragActive){e.preventDefault();dMove(e.touches[0].clientX,e.touches[0].clientY);}
+},{passive:false});
+window.addEventListener('mouseup',dEnd);
+window.addEventListener('touchend',dEnd);
+
+// ── Click selezione ──
+function findClosest(el,ex,ey){
+  var rect=el.getBoundingClientRect();
+  var mx=ex-rect.left,my=ey-rect.top;
+  var W=el.clientWidth,H=el.clientHeight,cx=W/2,cy=H/2;
+  var pxPerCm=W/MONITOR_W_CM;
+  var scaleCube=EYE_CM/distCm;
+  var ladoPx=cubeSizeCm*scaleCube*pxPerCm;
+  var baseR=(ladoPx/S)*0.333;
+  // Seleziona il cerchio visivamente in cima: tra tutti quelli che contengono
+  // il punto cliccato, prendi quello con Z_eye minore (più vicino all'osservatore)
+  var best=null,bestZ=Infinity;
+  for(var i=0;i<builtPts.length;i++){
+    var p=builtPts[i];
+    var pr=project(p.rx,p.ry,p.rz,cx,cy,W);
+    if(!pr.visible) continue;
+    var r=baseR*pr.scale/scaleCube;
+    var dx=pr.sx-mx,dy=pr.sy-my;
+    if(dx*dx+dy*dy<=r*r){
+      if(pr.Z_eye<bestZ){bestZ=pr.Z_eye;best=p;}
+    }
+  }
+  return best;
+}
+
+['c1','c2'].forEach(function(id){
+  document.getElementById(id).addEventListener('click',function(e){
+    if(dragMoved) return;
+    var p=findClosest(this,e.clientX,e.clientY);
+    if(p){selectedIdx=(selectedIdx===p.idx)?null:p.idx;render();updateInfo();}
+  });
+});
+
+// ── Info ──
+function fmtLab(lab){
+  return 'L* '+lab[0].toFixed(2)+'  a* '+lab[1].toFixed(2)+'  b* '+lab[2].toFixed(2);
+}
+
+function labBlock(label, lab){
+  return '<div class="cv" style="min-width:180px">'+
+    '<span class="lb">'+label+'</span>'+
+    '<span class="vv" style="font-size:10px">L* '+lab[0].toFixed(2)+'</span>'+
+    '<span class="vv" style="font-size:10px">a* '+lab[1].toFixed(2)+'</span>'+
+    '<span class="vv" style="font-size:10px">b* '+lab[2].toFixed(2)+'</span>'+
+    '</div>';
+}
+
+function colBlock(label, r, g, b){
+  // Calcola Lab D50 e D65 del colore (usando sRGB come input di riferimento)
+  var xyzD65=rgbToXYZ(r,g,b,'srgb','d65');
+  var xyzD50=rgbToXYZ(r,g,b,'srgb','d50');
+  var labD65=xyzToLab(xyzD65,WP.d65);
+  var labD50=xyzToLab(xyzD50,WP.d50);
+  return '<div class="cbw" style="align-items:flex-start">'+
+    '<div class="cb" style="background:'+toCSS(r,g,b)+';flex-shrink:0;margin-top:2px"></div>'+
+    '<div class="cv">'+
+      '<span class="lb">'+label+'</span>'+
+      '<span class="vv">R '+fmt(r)+'</span>'+
+      '<span class="vv">G '+fmt(g)+'</span>'+
+      '<span class="vv">B '+fmt(b)+'</span>'+
+    '</div>'+
+    '<div class="cv" style="margin-left:10px">'+
+      '<span class="lb">Lab D65</span>'+
+      '<span class="vv" style="font-size:10px">L* '+labD65[0].toFixed(2)+'</span>'+
+      '<span class="vv" style="font-size:10px">a* '+labD65[1].toFixed(2)+'</span>'+
+      '<span class="vv" style="font-size:10px">b* '+labD65[2].toFixed(2)+'</span>'+
+    '</div>'+
+    '<div class="cv" style="margin-left:10px">'+
+      '<span class="lb">Lab D50</span>'+
+      '<span class="vv" style="font-size:10px">L* '+labD50[0].toFixed(2)+'</span>'+
+      '<span class="vv" style="font-size:10px">a* '+labD50[1].toFixed(2)+'</span>'+
+      '<span class="vv" style="font-size:10px">b* '+labD50[2].toFixed(2)+'</span>'+
+    '</div>'+
+  '</div>';
+}
+
+function updateInfo(){
+  var panel=document.getElementById('info-panel');
+  if(selectedIdx===null){
+    panel.innerHTML='<span class="nos">Click a sphere to inspect RGB values.</span>';return;
+  }
+  var p=null;
+  for(var i=0;i<builtPts.length;i++){if(builtPts[i].idx===selectedIdx){p=builtPts[i];break;}}
+  if(!p){
+    panel.innerHTML='<span class="nos">Point clipped (in front of screen). Rotate the cube.</span>';return;
+  }
+  var inp=p.inp,out=p.out;
+  panel.innerHTML=
+    colBlock('Input', inp.r, inp.g, inp.b)+
+    '<div class="arr">→</div>'+
+    colBlock('Output', out.r, out.g, out.b);
+}
+
+window.addEventListener('load',function(){setTimeout(resize,50);});
+})();
+</script>
+</body>
+</html>
