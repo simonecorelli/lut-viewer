@@ -4,7 +4,7 @@
 
 A browser-based, zero-dependency 3D LUT visualiser. Load any Adobe `.CUBE` file and explore the colour transformation it encodes as an interactive 3D point cloud — with physically-correct perspective, CIE Lab visualisation, and live image preview.
 
-→ **[Open the live app](https://your-username.github.io/lut-viewer/)**
+→ **[Open the live app](https://simonecorelli.github.io/lut-viewer/)**
 
 ---
 
